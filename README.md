@@ -4,6 +4,7 @@
 - [Install packages](#install-packages)
 - [Import dummy dataset](#import-dummy-dataset)
 - [Build sqlite database](#build-sqlite-database)
+- [Convert to R.script](#convert-to-rscript)
 
 ## Install packages
 
@@ -95,4 +96,10 @@ dbplyr::remote_query(table_query)
 
 ``` r
 dbDisconnect(db_connection)
+```
+
+## Convert to R.script
+
+``` r
+knitr::purl("database-tools.qmd")
 ```
