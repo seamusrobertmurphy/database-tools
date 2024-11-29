@@ -1,4 +1,4 @@
-## ----setup--------------------------------------------------------------------------------------------------------
+## ----setup-------------------------------------------------------------------------------------------------------------
 #| warning: false
 #| message: false
 #| error: false
@@ -14,6 +14,8 @@ easypackages::packages(
   "DBI",
   "dplyr",
   "extrafont",
+  "glue",
+  "here",
   "htmltools",
   "janitor",
   "kableExtra",
@@ -27,39 +29,74 @@ options(htmltools.dir.version = FALSE, htmltools.preserve.raw = FALSE)
 sf::sf_use_s2(use_s2 = FALSE)
 
 
-## -----------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------------------
 set.seed(333)
-dataset_tidy <- read.csv("./R/dataset_tidy.csv")
-dataset_tidy
+excel_data <- read.csv("./R/dataset_tidy.csv")
+excel_data
 
 
-## -----------------------------------------------------------------------------------------------------------------
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.sqlite")
-dbDisconnect(db_connection)
+## ----------------------------------------------------------------------------------------------------------------------
+# enable additional extensions in RSQLite
+RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
 
-# for temporary on-disk database, use filename ""
-# for temporary in-memory database, use filename  ":memory:"
-#mydb <- dbConnect(RSQLite::SQLite(), "")
-#mydb <- dbConnect(RSQLite::SQLite(), ":memory:")
-
-
-## -----------------------------------------------------------------------------------------------------------------
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.sqlite")
-DBI::dbWriteTable(db_connection, "dataset_tidy", dataset_tidy, overwite = T, append = T)
-dbListTables(db_connection)
-dbDisconnect(db_connection)
-
-# alternative workflow; requires empty database to copy into
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-RSQLite::initExtension(db_connection)
-dplyr::copy_to(db_connection, dataset_tidy)
-table_query = dplyr::tbl(db_connection, "dataset_tidy") 
-dbplyr::remote_query(table_query)
-dbDisconnect(db_connection)
+# establish connection / create empty database
+db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
+#db_connection = dbConnect(RSQLite::SQLite(), "")         #temporary on-disk database
+#db_connection = dbConnect(RSQLite::SQLite(), ":memory:") #temporary in-memory database
+DBI::dbDisconnect(db_connection)
 
 
-## -----------------------------------------------------------------------------------------------------------------
+## ----------------------------------------------------------------------------------------------------------------------
+# connect
+db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
+
+# write new table
+DBI::dbWriteTable(
+  conn      = db_connection, 
+  name      = "tree_init", 
+  value     = excel_data, 
+  overwite  = T, 
+  append    = T
+  )
+
+# review content
+DBI::dbListTables(db_connection)
+DBI::dbListFields(db_connection, name = "tree_init")
+
+
+## ----------------------------------------------------------------------------------------------------------------------
+# write sql query
+query =  "SELECT species_j, volume
+          FROM tree_init
+          WHERE species_j == 'Sp1'"
+        
+species_volume_1 = DBI::dbGetQuery(db_connection, statement = query)
+
+# dplyr sql query
+species_volume_2 = db_connection |>
+  dplyr::tbl("tree_init") |>
+  dplyr::select(species_j, volume) |>
+  dplyr::filter(species_j == 'Sp1') |>
+  dplyr::collect()
+
+# check if same
+species_volume_1
+species_volume_2
+
+
+## ----------------------------------------------------------------------------------------------------------------------
+create_table = DBI::dbExecute(db_connection, "CREATE TABLE tree_init (
+  stratum_i : INTEGER,
+  plot_sp   : INTEGER,
+  tree_l    : CHAR,
+  volume    : INTEGER,
+  bcef_r    : INTEGER,
+  cf        : INTEGER,
+  f         : INTEGER
+  )") 
+
+
+## ----------------------------------------------------------------------------------------------------------------------
 #| eval: false
-
-# knitr::purl("purl.Rmd")
+# knitr::purl("database-tools.qmd")
 
