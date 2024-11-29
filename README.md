@@ -5,6 +5,7 @@
 - [Import excel data](#import-excel-data)
 - [Build sql database](#build-sql-database)
 - [Query sql database](#query-sql-database)
+- [Disconnect dql database](#disconnect-dql-database)
 - [Convert to R.script](#convert-to-rscript)
 
 ## Install packages
@@ -63,18 +64,16 @@ To create an empty SQL database from scratch, simply supply the filename
 to `dbConnect()`:
 
 ``` r
-# enable additional extensions in RSQLite
-RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
-```
-
-    Error: object 'db_connection' not found
-
-``` r
 # establish connection / create empty database
 db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
 #db_connection = dbConnect(RSQLite::SQLite(), "")         #temporary on-disk database
 #db_connection = dbConnect(RSQLite::SQLite(), ":memory:") #temporary in-memory database
-DBI::dbDisconnect(db_connection)
+
+# enable additional extensions in RSQLite
+RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
+
+# disconnect
+#DBI::dbDisconnect(db_connection)
 ```
 
 To add content from a dataframe or excel file to the new SQL database,
@@ -141,6 +140,10 @@ species_volume_1
 | Sp1       |   4.80 |
 | Sp1       |   4.08 |
 | Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
 
 ``` r
 species_volume_2
@@ -160,24 +163,16 @@ species_volume_2
 | Sp1       |   4.80 |
 | Sp1       |   4.08 |
 | Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
 
-To create a new database table called `tree_init` and define new
-variables and data types inside this table, we use `dbExecute()`
-function:
+## Disconnect dql database
 
 ``` r
-create_table = DBI::dbExecute(db_connection, "CREATE TABLE tree_init (
-  stratum_i : INTEGER,
-  plot_sp   : INTEGER,
-  tree_l    : CHAR,
-  volume    : INTEGER,
-  bcef_r    : INTEGER,
-  cf        : INTEGER,
-  f         : INTEGER
-  )") 
+DBI::dbDisconnect(db_connection)
 ```
-
-    Error: table tree_init already exists
 
 ## Convert to R.script
 

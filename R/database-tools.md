@@ -2,8 +2,10 @@
 
 
 - [Install packages](#install-packages)
-- [Import dummy dataset](#import-dummy-dataset)
-- [Build sqlite database](#build-sqlite-database)
+- [Import excel data](#import-excel-data)
+- [Build sql database](#build-sql-database)
+- [Query sql database](#query-sql-database)
+- [Disconnect dql database](#disconnect-dql-database)
 - [Convert to R.script](#convert-to-rscript)
 
 ## Install packages
@@ -20,6 +22,8 @@ easypackages::packages(
   "DBI",
   "dplyr",
   "extrafont",
+  "glue",
+  "here",
   "htmltools",
   "janitor",
   "kableExtra",
@@ -33,12 +37,12 @@ options(htmltools.dir.version = FALSE, htmltools.preserve.raw = FALSE)
 sf::sf_use_s2(use_s2 = FALSE)
 ```
 
-## Import dummy dataset
+## Import excel data
 
 ``` r
 set.seed(333)
-dataset_tidy <- read.csv("./R/dataset_tidy.csv")
-dataset_tidy
+excel_data <- read.csv("./R/dataset_tidy.csv")
+excel_data
 ```
 
 | stratum_i | plot_sp | species_j | tree_l | volume | bcef_r |  cf |   d |
@@ -54,48 +58,120 @@ dataset_tidy
 |         2 |       1 | Sp4       | t4     |   2.94 |    0.7 | 0.5 | 0.5 |
 |         2 |       1 | Sp5       | t5     |   3.36 |    0.7 | 0.5 | 0.5 |
 
-## Build sqlite database
+## Build sql database
 
-To create a new SQLite database from scratch, simply supply the filename
+To create an empty SQL database from scratch, simply supply the filename
 to `dbConnect()`:
 
 ``` r
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.sqlite")
-dbDisconnect(db_connection)
+# establish connection / create empty database
+db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
+#db_connection = dbConnect(RSQLite::SQLite(), "")         #temporary on-disk database
+#db_connection = dbConnect(RSQLite::SQLite(), ":memory:") #temporary in-memory database
 
-# for temporary on-disk database, use filename ""
-# for temporary in-memory database, use filename  ":memory:"
-#mydb <- dbConnect(RSQLite::SQLite(), "")
-#mydb <- dbConnect(RSQLite::SQLite(), ":memory:")
+# enable additional extensions in RSQLite
+RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
+
+# disconnect
+#DBI::dbDisconnect(db_connection)
 ```
 
-To copy from an R dataframe into a new SQLite database, use
-`dbWriteTable()` functions:
+To add content from a dataframe or excel file to the new SQL database,
+use `dbWriteTable()` functions:
 
 ``` r
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.sqlite")
-DBI::dbWriteTable(db_connection, "dataset_tidy", dataset_tidy, overwite = T, append = T)
-dbListTables(db_connection)
+# connect
+db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
+
+# write new table
+DBI::dbWriteTable(
+  conn      = db_connection, 
+  name      = "tree_init", 
+  value     = excel_data, 
+  overwite  = T, 
+  append    = T
+  )
+
+# review content
+DBI::dbListTables(db_connection)
 ```
 
-    [1] "dataset_tidy"
+    [1] "dataset_tidy" "tree_init"   
 
 ``` r
-dbDisconnect(db_connection)
-
-# alternative workflow; requires empty database to copy into
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-RSQLite::initExtension(db_connection)
-dplyr::copy_to(db_connection, dataset_tidy)
-table_query = dplyr::tbl(db_connection, "dataset_tidy") 
-dbplyr::remote_query(table_query)
+DBI::dbListFields(db_connection, name = "tree_init")
 ```
 
-    <SQL> SELECT *
-    FROM `dataset_tidy`
+    [1] "stratum_i" "plot_sp"   "species_j" "tree_l"    "volume"    "bcef_r"   
+    [7] "cf"        "d"        
+
+## Query sql database
 
 ``` r
-dbDisconnect(db_connection)
+# write sql query
+query =  "SELECT species_j, volume
+          FROM tree_init
+          WHERE species_j == 'Sp1'"
+        
+species_volume_1 = DBI::dbGetQuery(db_connection, statement = query)
+
+# dplyr sql query
+species_volume_2 = db_connection |>
+  dplyr::tbl("tree_init") |>
+  dplyr::select(species_j, volume) |>
+  dplyr::filter(species_j == 'Sp1') |>
+  dplyr::collect()
+
+# check if same
+species_volume_1
+```
+
+| species_j | volume |
+|:----------|-------:|
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+
+``` r
+species_volume_2
+```
+
+| species_j | volume |
+|:----------|-------:|
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+| Sp1       |   3.30 |
+| Sp1       |   4.80 |
+| Sp1       |   4.08 |
+| Sp1       |   1.38 |
+
+## Disconnect dql database
+
+``` r
+DBI::dbDisconnect(db_connection)
 ```
 
 ## Convert to R.script

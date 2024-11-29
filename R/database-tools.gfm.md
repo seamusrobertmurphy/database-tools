@@ -34,6 +34,8 @@ easypackages::packages(
   "DBI",
   "dplyr",
   "extrafont",
+  "glue",
+  "here",
   "htmltools",
   "janitor",
   "kableExtra",
@@ -50,7 +52,7 @@ sf::sf_use_s2(use_s2 = FALSE)
 
 
 
-## Import dummy dataset
+## Import excel data
 
 
 
@@ -58,8 +60,8 @@ sf::sf_use_s2(use_s2 = FALSE)
 
 ```{.r .cell-code}
 set.seed(333)
-dataset_tidy <- read.csv("./R/dataset_tidy.csv")
-dataset_tidy
+excel_data <- read.csv("./R/dataset_tidy.csv")
+excel_data
 ```
 
 ::: {.cell-output-display}
@@ -82,73 +84,169 @@ dataset_tidy
 
 
 
-## Build sqlite database
+## Build sql database
 
-To create a new SQLite database from scratch, simply supply the filename to `dbConnect()`:
-
-
-
-::: {.cell}
-
-```{.r .cell-code}
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.sqlite")
-dbDisconnect(db_connection)
-
-# for temporary on-disk database, use filename ""
-# for temporary in-memory database, use filename  ":memory:"
-#mydb <- dbConnect(RSQLite::SQLite(), "")
-#mydb <- dbConnect(RSQLite::SQLite(), ":memory:")
-```
-:::
-
-
-
-To copy from an R dataframe into a new SQLite database, use `dbWriteTable()` functions: 
+To create an empty SQL database from scratch, simply supply the filename to `dbConnect()`:
 
 
 
 ::: {.cell}
 
 ```{.r .cell-code}
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.sqlite")
-DBI::dbWriteTable(db_connection, "dataset_tidy", dataset_tidy, overwite = T, append = T)
-dbListTables(db_connection)
+# establish connection / create empty database
+db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
+#db_connection = dbConnect(RSQLite::SQLite(), "")         #temporary on-disk database
+#db_connection = dbConnect(RSQLite::SQLite(), ":memory:") #temporary in-memory database
+
+# enable additional extensions in RSQLite
+RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
+
+# disconnect
+#DBI::dbDisconnect(db_connection)
+```
+:::
+
+
+
+To add content from a dataframe or excel file to the new SQL database, use `dbWriteTable()` functions: 
+
+
+
+::: {.cell}
+
+```{.r .cell-code}
+# connect
+db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
+
+# write new table
+DBI::dbWriteTable(
+  conn      = db_connection, 
+  name      = "tree_init", 
+  value     = excel_data, 
+  overwite  = T, 
+  append    = T
+  )
+
+# review content
+DBI::dbListTables(db_connection)
 ```
 
 ::: {.cell-output .cell-output-stdout}
 
 ```
-[1] "dataset_tidy"
+[1] "dataset_tidy" "tree_init"   
 ```
 
 
 :::
 
 ```{.r .cell-code}
-dbDisconnect(db_connection)
-
-# alternative workflow; requires empty database to copy into
-db_connection <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-RSQLite::initExtension(db_connection)
-dplyr::copy_to(db_connection, dataset_tidy)
-table_query = dplyr::tbl(db_connection, "dataset_tidy") 
-dbplyr::remote_query(table_query)
+DBI::dbListFields(db_connection, name = "tree_init")
 ```
 
 ::: {.cell-output .cell-output-stdout}
 
 ```
-<SQL> SELECT *
-FROM `dataset_tidy`
+[1] "stratum_i" "plot_sp"   "species_j" "tree_l"    "volume"    "bcef_r"   
+[7] "cf"        "d"        
 ```
 
+
+:::
+:::
+
+
+
+## Query sql database
+
+
+
+::: {.cell}
+
+```{.r .cell-code}
+# write sql query
+query =  "SELECT species_j, volume
+          FROM tree_init
+          WHERE species_j == 'Sp1'"
+        
+species_volume_1 = DBI::dbGetQuery(db_connection, statement = query)
+
+# dplyr sql query
+species_volume_2 = db_connection |>
+  dplyr::tbl("tree_init") |>
+  dplyr::select(species_j, volume) |>
+  dplyr::filter(species_j == 'Sp1') |>
+  dplyr::collect()
+
+# check if same
+species_volume_1
+```
+
+::: {.cell-output-display}
+
+|species_j | volume|
+|:---------|------:|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
 
 :::
 
 ```{.r .cell-code}
-dbDisconnect(db_connection)
+species_volume_2
+```
+
+::: {.cell-output-display}
+
+|species_j | volume|
+|:---------|------:|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+
+:::
+:::
+
+
+
+## Disconnect dql database
+
+
+
+
+::: {.cell}
+
+```{.r .cell-code}
+DBI::dbDisconnect(db_connection)
 ```
 :::
+
 
 
  
