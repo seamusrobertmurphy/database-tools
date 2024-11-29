@@ -37,8 +37,9 @@ easypackages::packages(
   "janitor",
   "kableExtra",
   "knitr",
-  "readxl",
+  "openxlsx",
   "RSQLite",
+  "tidyverse",
   "tinytex")
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
   error = TRUE, comment = NA, tidy.opts = list(width.cutoff = 60)) 
@@ -50,8 +51,13 @@ sf::sf_use_s2(use_s2 = FALSE)
 
 ```{r}
 set.seed(333)
-excel_data <- read.csv("./R/dataset_tidy.csv")
-excel_data
+csv_data = utils::read.csv("./R/dataset_tidy.csv")            # faster execution
+xlsx_data = openxlsx::read.xlsx("./R/dataset_raw.xlsx")       # preserves naming & header data
+xlsx_workbook = openxlsx::loadWorkbook("./R/dataset_raw.xlsx")# extract tab/sheet from workbook
+
+# excel header sometimes needed to extract location & date 
+header = xlsx_workbook$worksheets[[1]]$headerFooter$oddHeader[[2]]
+header
 ```
 
 ## Build sql database
@@ -66,9 +72,6 @@ db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database
 
 # enable additional extensions in RSQLite
 RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
-
-# disconnect
-#DBI::dbDisconnect(db_connection)
 ```
 
 To add content from a dataframe or excel file to the new SQL database, use `dbWriteTable()` functions: 
@@ -77,16 +80,16 @@ To add content from a dataframe or excel file to the new SQL database, use `dbWr
 # connect
 db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
 
-# write new table
+# write table
 DBI::dbWriteTable(
   conn      = db_connection, 
   name      = "tree_init", 
-  value     = excel_data, 
+  value     = csv_data, 
   overwite  = T, 
   append    = T
   )
 
-# review content
+# review database
 DBI::dbListTables(db_connection)
 DBI::dbListFields(db_connection, name = "tree_init")
 ```
@@ -112,16 +115,38 @@ species_volume_2 = db_connection |>
 species_volume_1
 species_volume_2
 ```
+## Preprocess database
 
-## Disconnect dql database
+Note that the `dbGetQuery()` function produces outputs in dataframe format, which we can clean using base R and tidyverse functions.
 
+```{r}
+# review structure
+str(species_volume_1)
+
+# review categoricals 
+dplyr::count(species_volume_1, species_j)
+
+# relabel columns
+species_volume_1_renamed = dplyr::rename(species_volume_1, species = 'species_j')
+
+# check missing values
+species_volume_1_renamed |>
+  select(species, volume) |> # inspect specific columns
+  summarise(across(.fns = ~sum(is.na(.)))) |>
+  pivot_longer(everything())
+
+# drop missing values
+species_volume_1_renamed_cleaned = species_volume_1_renamed |> drop_na()
+```
+
+## Disconnect sql database
 
 ```{r}
 DBI::dbDisconnect(db_connection)
 ```
 
  
-## Convert to R.script
+## Convert to script.R
 
 ```{r}
 #| eval: false

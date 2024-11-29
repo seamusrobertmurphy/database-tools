@@ -40,8 +40,9 @@ easypackages::packages(
   "janitor",
   "kableExtra",
   "knitr",
-  "readxl",
+  "openxlsx",
   "RSQLite",
+  "tidyverse",
   "tinytex")
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
   error = TRUE, comment = NA, tidy.opts = list(width.cutoff = 60)) 
@@ -60,24 +61,21 @@ sf::sf_use_s2(use_s2 = FALSE)
 
 ```{.r .cell-code}
 set.seed(333)
-excel_data <- read.csv("./R/dataset_tidy.csv")
-excel_data
+csv_data = utils::read.csv("./R/dataset_tidy.csv")            # faster execution
+xlsx_data = openxlsx::read.xlsx("./R/dataset_raw.xlsx")       # preserves naming & header data
+xlsx_workbook = openxlsx::loadWorkbook("./R/dataset_raw.xlsx")# extract tab/sheet from workbook
+
+# excel header sometimes needed to extract location & date 
+header = xlsx_workbook$worksheets[[1]]$headerFooter$oddHeader[[2]]
+header
 ```
 
-::: {.cell-output-display}
+::: {.cell-output .cell-output-stdout}
 
-| stratum_i| plot_sp|species_j |tree_l | volume| bcef_r|  cf|   d|
-|---------:|-------:|:---------|:------|------:|------:|---:|---:|
-|         1|       1|Sp1       |t1     |   3.30|    0.7| 0.5| 0.5|
-|         1|       1|Sp1       |t2     |   4.80|    0.7| 0.5| 0.5|
-|         1|       1|Sp1       |t3     |   4.08|    0.7| 0.5| 0.5|
-|         1|       2|Sp4       |t1     |   1.50|    0.7| 0.5| 0.5|
-|         1|       2|Sp4       |t2     |   1.68|    0.7| 0.5| 0.5|
-|         2|       1|Sp1       |t1     |   1.38|    0.7| 0.5| 0.5|
-|         2|       1|Sp2       |t2     |   3.24|    0.7| 0.5| 0.5|
-|         2|       1|Sp3       |t3     |   3.72|    0.7| 0.5| 0.5|
-|         2|       1|Sp4       |t4     |   2.94|    0.7| 0.5| 0.5|
-|         2|       1|Sp5       |t5     |   3.36|    0.7| 0.5| 0.5|
+```
+[1] "&amp;&quot;Times New Roman,Regular&quot;&amp;12&amp;A"
+```
+
 
 :::
 :::
@@ -100,9 +98,6 @@ db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database
 
 # enable additional extensions in RSQLite
 RSQLite::initExtension(db_connection, extension = c("math", "regexp", "series", "csv", "uuid"))
-
-# disconnect
-#DBI::dbDisconnect(db_connection)
 ```
 :::
 
@@ -118,16 +113,16 @@ To add content from a dataframe or excel file to the new SQL database, use `dbWr
 # connect
 db_connection <- DBI::dbConnect(RSQLite::SQLite(), "/Users/seamus/Repos/database-tools/R/database.db")
 
-# write new table
+# write table
 DBI::dbWriteTable(
   conn      = db_connection, 
   name      = "tree_init", 
-  value     = excel_data, 
+  value     = csv_data, 
   overwite  = T, 
   append    = T
   )
 
-# review content
+# review database
 DBI::dbListTables(db_connection)
 ```
 
@@ -202,6 +197,14 @@ species_volume_1
 |Sp1       |   4.80|
 |Sp1       |   4.08|
 |Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
 
 :::
 
@@ -229,14 +232,85 @@ species_volume_2
 |Sp1       |   4.80|
 |Sp1       |   4.08|
 |Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
+|Sp1       |   3.30|
+|Sp1       |   4.80|
+|Sp1       |   4.08|
+|Sp1       |   1.38|
 
 :::
 :::
 
 
+## Preprocess database
 
-## Disconnect dql database
+Note that the `dbGetQuery()` function produces outputs in dataframe format, which we can clean using base R and tidyverse functions.
 
+
+
+::: {.cell}
+
+```{.r .cell-code}
+# review structure
+str(species_volume_1)
+```
+
+::: {.cell-output .cell-output-stdout}
+
+```
+'data.frame':	24 obs. of  2 variables:
+ $ species_j: chr  "Sp1" "Sp1" "Sp1" "Sp1" ...
+ $ volume   : num  3.3 4.8 4.08 1.38 3.3 4.8 4.08 1.38 3.3 4.8 ...
+```
+
+
+:::
+
+```{.r .cell-code}
+# review categoricals 
+dplyr::count(species_volume_1, species_j)
+```
+
+::: {.cell-output-display}
+
+|species_j |  n|
+|:---------|--:|
+|Sp1       | 24|
+
+:::
+
+```{.r .cell-code}
+# relabel columns
+species_volume_1_renamed = dplyr::rename(species_volume_1, species = 'species_j')
+
+# check missing values
+species_volume_1_renamed |>
+  select(species, volume) |> # inspect specific columns
+  summarise(across(.fns = ~sum(is.na(.)))) |>
+  pivot_longer(everything())
+```
+
+::: {.cell-output-display}
+
+|name    | value|
+|:-------|-----:|
+|species |     0|
+|volume  |     0|
+
+:::
+
+```{.r .cell-code}
+# drop missing values
+species_volume_1_renamed_cleaned = species_volume_1_renamed |> drop_na()
+```
+:::
+
+
+
+## Disconnect sql database
 
 
 
@@ -250,7 +324,7 @@ DBI::dbDisconnect(db_connection)
 
 
  
-## Convert to R.script
+## Convert to script.R
 
 
 
